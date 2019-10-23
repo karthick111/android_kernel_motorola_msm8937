@@ -48,8 +48,6 @@
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-#include <linux/earlysuspend.h>
 #endif
 
 #include "nt36xxx.h"
@@ -94,9 +92,6 @@ extern void Boot_Update_Firmware(struct work_struct *work);
 static int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 static int power_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 void nvt_usb_plugin_setting(uint8_t plugin);
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-static void nvt_ts_early_suspend(struct early_suspend *h);
-static void nvt_ts_late_resume(struct early_suspend *h);
 #endif
 
 static const struct nvt_ts_mem_map NT36772_memory_map = {
@@ -1453,15 +1448,6 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 		NVT_ERR("register power_notifier failed. ret=%d\n", ret);
 		goto err_register_fb_notif_failed;
 	}
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
-	ts->early_suspend.suspend = nvt_ts_early_suspend;
-	ts->early_suspend.resume = nvt_ts_late_resume;
-	ret = register_early_suspend(&ts->early_suspend);
-	if(ret) {
-		NVT_ERR("register early suspend failed. ret=%d\n", ret);
-		goto err_register_early_suspend_failed;
-	}
 #endif
 
 	bTouchIsAwake = 1;
@@ -1473,8 +1459,6 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 
 #if defined(CONFIG_FB)
 err_register_fb_notif_failed:
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-err_register_early_suspend_failed:
 #endif
 #if (NVT_TOUCH_PROC || NVT_TOUCH_EXT_PROC || NVT_TOUCH_MP)
 err_init_NVT_ts:
@@ -1511,9 +1495,6 @@ static int32_t nvt_ts_remove(struct i2c_client *client)
 	if (fb_unregister_client(&ts->fb_notif))
 		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
 	power_supply_unreg_notifier(&ts->power_notif);
-
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-	unregister_early_suspend(&ts->early_suspend);
 #endif
 
 #if NVT_TOUCH_FW
@@ -1776,39 +1757,12 @@ static int power_notifier_callback(struct notifier_block *self, unsigned long ev
 
 	return 0;
 }
-
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-/*******************************************************
-Description:
-	Novatek touchscreen driver early suspend function.
-
-return:
-	n.a.
-*******************************************************/
-static void nvt_ts_early_suspend(struct early_suspend *h)
-{
-	nvt_ts_suspend(ts->client, PMSG_SUSPEND);
-}
-
-/*******************************************************
-Description:
-	Novatek touchscreen driver late resume function.
-
-return:
-	n.a.
-*******************************************************/
-static void nvt_ts_late_resume(struct early_suspend *h)
-{
-	nvt_ts_resume(ts->client);
-}
 #endif
 
-#if 0
 static const struct dev_pm_ops nvt_ts_dev_pm_ops = {
 	.suspend = nvt_ts_suspend,
 	.resume  = nvt_ts_resume,
 };
-#endif
 
 static const struct i2c_device_id nvt_ts_id[] = {
 	{ NVT_I2C_NAME, 0 },
