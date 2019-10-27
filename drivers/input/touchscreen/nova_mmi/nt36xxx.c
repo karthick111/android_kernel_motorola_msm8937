@@ -239,24 +239,6 @@ const uint16_t touch_key_array[TOUCH_KEY_NUM] = {
 };
 #endif
 
-#if WAKEUP_GESTURE
-const uint16_t gesture_key_array[] = {
-	KEY_POWER,  /*GESTURE_WORD_C*/
-	KEY_POWER,  /*GESTURE_WORD_W*/
-	KEY_POWER,  /*GESTURE_WORD_V*/
-	KEY_POWER,  /*GESTURE_DOUBLE_CLICK*/
-	KEY_POWER,  /*GESTURE_WORD_Z*/
-	KEY_POWER,  /*GESTURE_WORD_M*/
-	KEY_POWER,  /*GESTURE_WORD_O*/
-	KEY_POWER,  /*GESTURE_WORD_e*/
-	KEY_POWER,  /*GESTURE_WORD_S*/
-	KEY_POWER,  /*GESTURE_SLIDE_UP*/
-	KEY_POWER,  /*GESTURE_SLIDE_DOWN*/
-	KEY_POWER,  /*GESTURE_SLIDE_LEFT*/
-	KEY_POWER,  /*GESTURE_SLIDE_RIGHT*/
-};
-#endif
-
 static uint8_t bTouchIsAwake = 0;
 
 /*******************************************************
@@ -758,102 +740,6 @@ static int32_t nvt_flash_proc_init(void)
 }
 #endif
 
-#if WAKEUP_GESTURE
-#define GESTURE_WORD_C			12
-#define GESTURE_WORD_W			13
-#define GESTURE_WORD_V			14
-#define GESTURE_DOUBLE_CLICK	15
-#define GESTURE_WORD_Z			16
-#define GESTURE_WORD_M			17
-#define GESTURE_WORD_O			18
-#define GESTURE_WORD_e			19
-#define GESTURE_WORD_S			20
-#define GESTURE_SLIDE_UP		21
-#define GESTURE_SLIDE_DOWN		22
-#define GESTURE_SLIDE_LEFT		23
-#define GESTURE_SLIDE_RIGHT		24
-
-static struct wake_lock gestrue_wakelock;
-
-/*******************************************************
-Description:
-	Novatek touchscreen wake up gesture key report function.
-
-return:
-	n.a.
-*******************************************************/
-void nvt_ts_wakeup_gesture_report(uint8_t gesture_id)
-{
-	uint32_t keycode = 0;
-
-	NVT_LOG("gesture_id = %d\n", gesture_id);
-
-	switch (gesture_id) {
-		case GESTURE_WORD_C:
-			NVT_LOG("Gesture : Word-C.\n");
-			keycode = gesture_key_array[0];
-			break;
-		case GESTURE_WORD_W:
-			NVT_LOG("Gesture : Word-W.\n");
-			keycode = gesture_key_array[1];
-			break;
-		case GESTURE_WORD_V:
-			NVT_LOG("Gesture : Word-V.\n");
-			keycode = gesture_key_array[2];
-			break;
-		case GESTURE_DOUBLE_CLICK:
-			NVT_LOG("Gesture : Double Click.\n");
-			keycode = gesture_key_array[3];
-			break;
-		case GESTURE_WORD_Z:
-			NVT_LOG("Gesture : Word-Z.\n");
-			keycode = gesture_key_array[4];
-			break;
-		case GESTURE_WORD_M:
-			NVT_LOG("Gesture : Word-M.\n");
-			keycode = gesture_key_array[5];
-			break;
-		case GESTURE_WORD_O:
-			NVT_LOG("Gesture : Word-O.\n");
-			keycode = gesture_key_array[6];
-			break;
-		case GESTURE_WORD_e:
-			NVT_LOG("Gesture : Word-e.\n");
-			keycode = gesture_key_array[7];
-			break;
-		case GESTURE_WORD_S:
-			NVT_LOG("Gesture : Word-S.\n");
-			keycode = gesture_key_array[8];
-			break;
-		case GESTURE_SLIDE_UP:
-			NVT_LOG("Gesture : Slide UP.\n");
-			keycode = gesture_key_array[9];
-			break;
-		case GESTURE_SLIDE_DOWN:
-			NVT_LOG("Gesture : Slide DOWN.\n");
-			keycode = gesture_key_array[10];
-			break;
-		case GESTURE_SLIDE_LEFT:
-			NVT_LOG("Gesture : Slide LEFT.\n");
-			keycode = gesture_key_array[11];
-			break;
-		case GESTURE_SLIDE_RIGHT:
-			NVT_LOG("Gesture : Slide RIGHT.\n");
-			keycode = gesture_key_array[12];
-			break;
-		default:
-			break;
-	}
-
-	if (keycode > 0) {
-		input_report_key(ts->input_dev, keycode, 1);
-		input_sync(ts->input_dev);
-		input_report_key(ts->input_dev, keycode, 0);
-		input_sync(ts->input_dev);
-	}
-}
-#endif
-
 /*******************************************************
 Description:
 	Novatek touchscreen parse device tree function.
@@ -994,16 +880,6 @@ static void nvt_ts_work_func(struct work_struct *work)
 	}
 #endif
 
-#if WAKEUP_GESTURE
-	if (bTouchIsAwake == 0) {
-		input_id = (uint8_t)(point_data[1] >> 3);
-		nvt_ts_wakeup_gesture_report(input_id);
-		enable_irq(ts->client->irq);
-		mutex_unlock(&ts->lock);
-		return;
-	}
-#endif
-
 	finger_cnt = 0;
 
 	for (i = 0; i < ts->max_touch_num; i++) {
@@ -1107,12 +983,6 @@ return:
 static irqreturn_t nvt_ts_irq_handler(int32_t irq, void *dev_id)
 {
 	disable_irq_nosync(ts->client->irq);
-
-#if WAKEUP_GESTURE
-	if (bTouchIsAwake == 0) {
-		wake_lock_timeout(&gestrue_wakelock, msecs_to_jiffies(5000));
-	}
-#endif
 
 	queue_work(nvt_wq, &ts->nvt_work);
 
@@ -1228,7 +1098,7 @@ return:
 static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int32_t ret = 0;
-#if ((TOUCH_KEY_NUM > 0) || WAKEUP_GESTURE)
+#if (TOUCH_KEY_NUM > 0)
 	int32_t retry = 0;
 #endif
 
@@ -1342,13 +1212,6 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 	}
 #endif
 
-#if WAKEUP_GESTURE
-	for (retry = 0; retry < (sizeof(gesture_key_array) / sizeof(gesture_key_array[0])); retry++) {
-		input_set_capability(ts->input_dev, EV_KEY, gesture_key_array[retry]);
-	}
-	wake_lock_init(&gestrue_wakelock, WAKE_LOCK_SUSPEND, "poll-wake-lock");
-#endif
-
 	sprintf(ts->phys, "input/ts");
 	ts->input_dev->name = NVT_TS_NAME;
 	ts->input_dev->phys = ts->phys;
@@ -1365,12 +1228,7 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 	client->irq = gpio_to_irq(ts->irq_gpio);
 	if (client->irq) {
 		NVT_LOG("int_trigger_type=%d\n", ts->int_trigger_type);
-
-#if WAKEUP_GESTURE
-		ret = request_irq(client->irq, nvt_ts_irq_handler, ts->int_trigger_type | IRQF_NO_SUSPEND, client->name, ts);
-#else
 		ret = request_irq(client->irq, nvt_ts_irq_handler, ts->int_trigger_type, client->name, ts);
-#endif
 		if (ret != 0) {
 			NVT_ERR("request irq failed. ret=%d\n", ret);
 			goto err_int_request_failed;
@@ -1544,31 +1402,12 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	cancel_delayed_work_sync(&nvt_esd_check_work);
 	nvt_esd_check_enable(false);
 #endif
-
-#if WAKEUP_GESTURE
-	/*---write i2c command to enter "wakeup gesture mode"---*/
-	buf[0] = EVENT_MAP_HOST_CMD;
-	buf[1] = 0x13;
-#if 0 /* Do not set 0xFF first, ToDo*/
-	buf[2] = 0xFF;
-	buf[3] = 0xFF;
-	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 4);
-#else
-	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
-#endif
-
-	enable_irq_wake(ts->client->irq);
-
-	NVT_LOG("Enabled touch wakeup gesture\n");
-
-#else /* WAKEUP_GESTURE*/
 	disable_irq(ts->client->irq);
 
 	/*---write i2c command to enter "deep sleep mode"---*/
 	buf[0] = EVENT_MAP_HOST_CMD;
 	buf[1] = 0x11;
 	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
-#endif /* WAKEUP_GESTURE*/
 
 	/* release all touches */
 #if MT_PROTOCOL_B
@@ -1622,9 +1461,7 @@ static int32_t nvt_ts_resume(struct device *dev)
 
 	NVT_LOG("enter-%s-----res=%d\n", __func__, res);
 
-#if !WAKEUP_GESTURE
 	enable_irq(ts->client->irq);
-#endif
 
 #if NVT_TOUCH_ESD_PROTECT
 	queue_delayed_work(nvt_esd_check_wq, &nvt_esd_check_work,
